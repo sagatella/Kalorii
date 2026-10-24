@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Калории">
+<title>Калории</title>
+<style>
+  :root { --green: #16a34a; --bg: #f3f4f6; --card: #ffffff; --text: #111827; --muted: #6b7280; --line: #e5e7eb; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111827; --card: #1f2937; --text: #f9fafb; --muted: #9ca3af; --line: #374151; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); padding: env(safe-area-inset-top) 16px 32px; }
+  h1 { font-size: 28px; margin: 24px 0 4px; }
+  h2 { font-size: 18px; margin: 0 0 12px; }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 16px; }
+  .card { background: var(--card); border-radius: 16px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  label { display: block; font-size: 14px; color: var(--muted); margin: 12px 0 4px; }
+  input, select { width: 100%; font-size: 17px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--text); }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip { flex: 1; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--text); font-size: 15px; text-align: center; }
+  .chip.on { border-color: var(--green); color: var(--green); font-weight: 600; }
+  button.main { width: 100%; padding: 14px; margin-top: 16px; font-size: 17px; font-weight: 600; background: var(--green); color: #fff; border: 0; border-radius: 14px; }
+  button.small { padding: 10px 14px; font-size: 15px; background: var(--line); color: var(--text); border: 0; border-radius: 12px; }
+  .big { font-size: 40px; font-weight: 700; color: var(--green); }
+  .stat { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+  .stat:last-child { border-bottom: 0; }
+  .macros { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; margin-top: 8px; }
+  .macros b { display: block; font-size: 20px; }
+  .macros span { font-size: 13px; color: var(--muted); }
+  .entry { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .entry:last-child { border-bottom: 0; }
+  .warn { font-size: 13px; color: var(--muted); margin-top: 12px; line-height: 1.4; }
+  .hidden { display: none; }
+  .tools { display: flex; justify-content: space-between; margin-top: 12px; }
+</style>
+</head>
+<body>
+
+<!-- Экран 1: профиль -->
+<div id="setup" class="hidden">
+  <h1>Ваш профиль</h1>
+  <div class="sub">Заполните один раз. Всё хранится только в этом телефоне.</div>
+  <div class="card">
+    <label>Пол</label>
+    <div class="chips">
+      <div class="chip" data-sex="female">Женский</div>
+      <div class="chip" data-sex="male">Мужской</div>
+    </div>
+    <div class="row">
+      <div><label>Возраст</label><input id="age" type="number" inputmode="numeric" min="14" max="100"></div>
+      <div><label>Рост, см</label><input id="height" type="number" inputmode="numeric" min="120" max="230"></div>
+    </div>
+    <div class="row">
+      <div><label>Вес сейчас, кг</label><input id="weight" type="number" inputmode="decimal" min="30" max="300" step="0.1"></div>
+      <div><label>Хочу весить, кг</label><input id="target" type="number" inputmode="decimal" min="30" max="300" step="0.1"></div>
+    </div>
+    <label>Уровень активности</label>
+    <select id="activity">
+      <option value="sedentary">Сидячий образ жизни</option>
+      <option value="light">Лёгкие тренировки 1–3 раза в неделю</option>
+      <option value="moderate">Умеренные тренировки 3–5 раз в неделю</option>
+      <option value="heavy">Интенсивные тренировки 6–7 раз в неделю</option>
+      <option value="very_heavy">Очень высокая нагрузка или физическая работа</option>
+    </select>
+    <label>Желаемый темп, кг в неделю</label>
+    <select id="pace">
+      <option value="0.25">0,25</option>
+      <option value="0.5">0,5</option>
+      <option value="1" selected>1</option>
+      <option value="1.5">1,5</option>
+      <option value="2">2</option>
+    </select>
+    <div id="setupError" class="warn"></div>
+    <button class="main" id="saveProfile">Сохранить</button>
+  </div>
+  <div class="warn">Это расчёт, а не медицинская рекомендация. При болезнях, беременности и для подростков — к врачу.</div>
+</div>
+
+<!-- Экран 2: главный -->
+<div id="main" class="hidden">
+  <h1>Сегодня</h1>
+  <div class="sub" id="today"></div>
+
+  <div class="card">
+    <h2>Норма на день</h2>
+    <div class="big" id="intake"></div>
+    <div class="warn" id="floorNote"></div>
+    <div class="stat"><span>Фактический темп</span><b id="pace2"></b></div>
+    <div class="stat"><span>Срок до цели</span><b id="weeks"></b></div>
+    <div class="stat"><span>Расход в покое + активность</span><b id="expend"></b></div>
+    <div class="macros">
+      <div><b id="protein"></b><span>белки, г</span></div>
+      <div><b id="fat"></b><span>жиры, г</span></div>
+      <div><b id="carbs"></b><span>углеводы, г</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Съедено сегодня</h2>
+    <div class="stat"><span>Осталось</span><b id="left"></b></div>
+    <div class="row" style="margin-top:12px">
+      <div><input id="foodName" placeholder="Что съели"></div>
+      <div style="flex:0.6"><input id="foodKcal" type="number" inputmode="numeric" placeholder="ккал"></div>
+    </div>
+    <button class="main" id="addFood">Добавить</button>
+    <div id="entries" style="margin-top:12px"></div>
+  </div>
+
+  <div class="tools">
+    <button class="small" id="editProfile">Изменить профиль</button>
+    <button class="small" id="resetAll">Стереть данные</button>
+  </div>
+</div>
+
+<script>
+  // Расчёт. Те же правила, что в calorie.js и тестах.
+  const ACTIVITY = { sedentary: 1.2, light: 1.375, moderate: 1.55, heavy: 1.725, very_heavy: 1.9 };
+  const FLOOR = 1200;
+  const KCAL_PER_KG = 7700;
+
+  function plan(p) {
+    const bmr = 10 * p.weight + 6.25 * p.height - 5 * p.age + (p.sex === 'male' ? 5 : -161);
+    const expend = Math.round(bmr * ACTIVITY[p.activity]);
+    const wanted = expend - (p.pace * KCAL_PER_KG) / 7;
+    const intake = Math.max(FLOOR, Math.round(wanted / 50) * 50);
+    const actualPace = ((expend - intake) * 7) / KCAL_PER_KG;
+    const protein = Math.round(1.8 * p.target);
+    const fat = Math.round(0.8 * p.target);
+    const carbs = Math.round((intake - protein * 4 - fat * 9) / 4);
+    const weeks = Math.ceil((p.weight - p.target) / actualPace);
+    return { expend, intake, actualPace: Math.round(actualPace * 100) / 100, floorApplied: intake === FLOOR && wanted < FLOOR, protein, fat, carbs, weeks };
+  }
+
+  // Хранилище: если браузер не даёт писать, приложение всё равно работает.
+  function load(key, fallback) {
+    try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch (e) { return fallback; }
+  }
+  function save(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
+  }
+
+  const $ = (id) => document.getElementById(id);
+  const todayKey = () => new Date().toISOString().slice(0, 10);
+  let sex = null;
+
+  document.querySelectorAll('[data-sex]').forEach((el) => {
+    el.addEventListener('click', () => {
+      sex = el.dataset.sex;
+      document.querySelectorAll('[data-sex]').forEach((x) => x.classList.toggle('on', x === el));
+    });
+  });
+
+  function showSetup(profile) {
+    $('setup').classList.remove('hidden');
+    $('main').classList.add('hidden');
+    if (profile) {
+      sex = profile.sex;
+      document.querySelectorAll('[data-sex]').forEach((x) => x.classList.toggle('on', x.dataset.sex === sex));
+      $('age').value = profile.age;
+      $('height').value = profile.height;
+      $('weight').value = profile.weight;
+      $('target').value = profile.target;
+      $('activity').value = profile.activity;
+      $('pace').value = String(profile.pace);
+    }
+  }
+
+  $('saveProfile').addEventListener('click', () => {
+    const p = {
+      sex,
+      age: Number($('age').value),
+      height: Number($('height').value),
+      weight: Number($('weight').value),
+      target: Number($('target').value),
+      activity: $('activity').value,
+      pace: Number($('pace').value),
+    };
+    if (!p.sex || !p.age || !p.height || !p.weight || !p.target) {
+      $('setupError').textContent = 'Заполните все поля.';
+      return;
+    }
+    if (p.target >= p.weight) {
+      $('setupError').textContent = 'Желаемый вес должен быть меньше текущего.';
+      return;
+    }
+    $('setupError').textContent = '';
+    save('profile', p);
+    showMain();
+  });
+
+  function showMain() {
+    const p = load('profile', null);
+    if (!p) return showSetup(null);
+    $('setup').classList.add('hidden');
+    $('main').classList.remove('hidden');
+    const r = plan(p);
+    $('today').textContent = new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
+    $('intake').textContent = r.intake + ' ккал';
+    $('floorNote').textContent = r.floorApplied ? 'Минимум 1200 ккал: ниже не опускаемся, поэтому темп ограничен.' : '';
+    $('pace2').textContent = r.actualPace.toString().replace('.', ',') + ' кг/нед';
+    $('weeks').textContent = '~' + r.weeks + ' нед.';
+    $('expend').textContent = r.expend + ' ккал';
+    $('protein').textContent = r.protein;
+    $('fat').textContent = r.fat;
+    $('carbs').textContent = r.carbs;
+    renderLog();
+  }
+
+  function renderLog() {
+    const p = load('profile', null);
+    const log = load('log', {});
+    const items = log[todayKey()] || [];
+    const eaten = items.reduce((sum, x) => sum + x.kcal, 0);
+    const left = plan(p).intake - eaten;
+    $('left').textContent = left + ' ккал';
+    $('entries').innerHTML = '';
+    items.forEach((x, i) => {
+      const row = document.createElement('div');
+      row.className = 'entry';
+      const name = document.createElement('span');
+      name.textContent = x.name + ' · ' + x.kcal + ' ккал';
+      const del = document.createElement('button');
+      del.className = 'small';
+      del.textContent = 'Убрать';
+      del.addEventListener('click', () => {
+        const l = load('log', {});
+        l[todayKey()].splice(i, 1);
+        save('log', l);
+        renderLog();
+      });
+      row.append(name, del);
+      $('entries').append(row);
+    });
+  }
+
+  $('addFood').addEventListener('click', () => {
+    const name = $('foodName').value.trim();
+    const kcal = Number($('foodKcal').value);
+    if (!name || !(kcal > 0)) return;
+    const log = load('log', {});
+    log[todayKey()] = log[todayKey()] || [];
+    log[todayKey()].push({ name, kcal: Math.round(kcal) });
+    save('log', log);
+    $('foodName').value = '';
+    $('foodKcal').value = '';
+    renderLog();
+  });
+
+  $('editProfile').addEventListener('click', () => showSetup(load('profile', null)));
+  $('resetAll').addEventListener('click', () => {
+    if (!confirm('Стереть профиль и весь дневник?')) return;
+    try { localStorage.clear(); } catch (e) {}
+    location.reload();
+  });
+
+  showMain();
+</script>
+</body>
+</html>
