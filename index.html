@@ -26,6 +26,7 @@
   .chip.on { border-color: var(--green); color: var(--green); font-weight: 600; }
   button.main { width: 100%; padding: 14px; margin-top: 16px; font-size: 17px; font-weight: 600; background: var(--green); color: #fff; border: 0; border-radius: 14px; }
   button.small { padding: 10px 14px; font-size: 15px; background: var(--line); color: var(--text); border: 0; border-radius: 12px; }
+  button.half { flex: 1; padding: 12px; font-size: 15px; font-weight: 600; background: var(--line); color: var(--text); border: 0; border-radius: 12px; }
   .big { font-size: 40px; font-weight: 700; color: var(--green); }
   .stat { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
   .stat:last-child { border-bottom: 0; }
@@ -37,6 +38,10 @@
   .warn { font-size: 13px; color: var(--muted); margin-top: 12px; line-height: 1.4; }
   .hidden { display: none; }
   .tools { display: flex; justify-content: space-between; margin-top: 12px; }
+  .result { display: block; width: 100%; text-align: left; padding: 12px; margin-top: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--text); font-size: 15px; }
+  .result small { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+  video { width: 100%; border-radius: 12px; background: #000; margin-top: 12px; }
+  .box { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
 </style>
 </head>
 <body>
@@ -103,11 +108,40 @@
   <div class="card">
     <h2>Съедено сегодня</h2>
     <div class="stat"><span>Осталось</span><b id="left"></b></div>
+
     <div class="row" style="margin-top:12px">
-      <div><input id="foodName" placeholder="Что съели"></div>
-      <div style="flex:0.6"><input id="foodKcal" type="number" inputmode="numeric" placeholder="ккал"></div>
+      <button class="half" id="btnScan">Штрихкод</button>
+      <button class="half" id="btnSearch">Поиск продукта</button>
     </div>
-    <button class="main" id="addFood">Добавить</button>
+
+    <!-- Сканер штрихкода -->
+    <div id="scanBox" class="box hidden">
+      <video id="video" playsinline muted></video>
+      <div class="warn" id="scanStatus">Наведите камеру на штрихкод на упаковке.</div>
+      <button class="small" id="stopScan" style="margin-top:8px">Закрыть сканер</button>
+    </div>
+
+    <!-- Поиск продукта -->
+    <div id="searchBox" class="box hidden">
+      <div class="row">
+        <input id="query" placeholder="Например: груша, творог, pear">
+        <button class="small" id="runSearch" style="flex:0.6">Найти</button>
+      </div>
+      <div class="warn">База USDA понимает английские названия (pear, chicken breast). Русские названия ищутся в базе упаковочных продуктов.</div>
+      <div id="results"></div>
+    </div>
+
+    <!-- Выбор порции -->
+    <div id="portion" class="box hidden">
+      <h2 id="pName"></h2>
+      <div class="warn" id="pInfo"></div>
+      <label>Сколько грамм</label>
+      <div class="row">
+        <input id="pGrams" type="number" inputmode="numeric" min="1" value="100">
+        <button class="small" id="addPortion" style="flex:0.8">В дневник</button>
+      </div>
+    </div>
+
     <div id="entries" style="margin-top:12px"></div>
   </div>
 
@@ -117,6 +151,8 @@
   </div>
 </div>
 
+<!-- Библиотека сканера штрихкодов (бесплатная, открытая) -->
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
 <script>
   // Расчёт. Те же правила, что в calorie.js и тестах.
   const ACTIVITY = { sedentary: 1.2, light: 1.375, moderate: 1.55, heavy: 1.725, very_heavy: 1.9 };
@@ -134,6 +170,51 @@
     const carbs = Math.round((intake - protein * 4 - fat * 9) / 4);
     const weeks = Math.ceil((p.weight - p.target) / actualPace);
     return { expend, intake, actualPace: Math.round(actualPace * 100) / 100, floorApplied: intake === FLOOR && wanted < FLOOR, protein, fat, carbs, weeks };
+  }
+
+  // Продукты. Калории на 100 г и порция в граммах.
+  function portionKcal(kcal100, grams) {
+    return Math.round((kcal100 * grams) / 100);
+  }
+
+  // Открытая база Open Food Facts: данные из магазинных упаковок.
+  function offItem(p) {
+    const n = p.nutriments || {};
+    let kcal = n['energy-kcal_100g'];
+    if (kcal == null && n['energy_100g'] != null) kcal = n['energy_100g'] / 4.184;
+    if (kcal == null) return null;
+    const name = [p.product_name, p.brands].filter(Boolean).join(', ') || 'Продукт';
+    return { name, kcal100: Math.round(kcal) };
+  }
+
+  // База USDA: данные по простым продуктам (английские названия).
+  function usdaItem(f) {
+    const get = (re, unit) => {
+      const n = (f.foodNutrients || []).find((x) => re.test(x.nutrientName) && (!unit || x.unitName === unit));
+      return n ? n.value : null;
+    };
+    const kcal = get(/^Energy$/, 'KCAL');
+    if (kcal == null) return null;
+    return { name: f.description, kcal100: Math.round(kcal) };
+  }
+
+  async function offByBarcode(code) {
+    const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=product_name,brands,nutriments`);
+    const j = await r.json();
+    return j.status === 1 ? offItem(j.product) : null;
+  }
+
+  async function offSearch(q) {
+    const r = await fetch(`https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=10`);
+    const j = await r.json();
+    return (j.products || []).map(offItem).filter(Boolean);
+  }
+
+  async function usdaSearch(q, key) {
+    const r = await fetch(`https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${encodeURIComponent(key)}&query=${encodeURIComponent(q)}&pageSize=10`);
+    if (!r.ok) throw new Error('USDA ' + r.status);
+    const j = await r.json();
+    return (j.foods || []).map(usdaItem).filter(Boolean);
   }
 
   // Хранилище: если браузер не даёт писать, приложение всё равно работает.
@@ -238,17 +319,114 @@
     });
   }
 
-  $('addFood').addEventListener('click', () => {
-    const name = $('foodName').value.trim();
-    const kcal = Number($('foodKcal').value);
-    if (!name || !(kcal > 0)) return;
+  function addEntry(name, kcal) {
     const log = load('log', {});
     log[todayKey()] = log[todayKey()] || [];
     log[todayKey()].push({ name, kcal: Math.round(kcal) });
     save('log', log);
-    $('foodName').value = '';
-    $('foodKcal').value = '';
     renderLog();
+  }
+
+  // Выбор продукта и порции
+  let picked = null;
+
+  function pick(item) {
+    picked = item;
+    $('portion').classList.remove('hidden');
+    $('pName').textContent = item.name;
+    $('pInfo').textContent = item.kcal100 + ' ккал на 100 г';
+    $('pGrams').value = 100;
+  }
+
+  $('addPortion').addEventListener('click', () => {
+    const g = Number($('pGrams').value);
+    if (!picked || !(g > 0)) return;
+    addEntry(picked.name + ', ' + g + ' г', portionKcal(picked.kcal100, g));
+    picked = null;
+    $('portion').classList.add('hidden');
+  });
+
+  // Штрихкод
+  let scanner = null;
+
+  function stopScan() {
+    if (scanner) {
+      try { scanner.reset(); } catch (e) {}
+      scanner = null;
+    }
+    $('scanBox').classList.add('hidden');
+  }
+
+  $('btnScan').addEventListener('click', () => {
+    $('searchBox').classList.add('hidden');
+    if (typeof ZXing === 'undefined') {
+      alert('Не загрузился сканер. Проверьте интернет и попробуйте снова.');
+      return;
+    }
+    $('scanBox').classList.remove('hidden');
+    $('scanStatus').textContent = 'Наведите камеру на штрихкод на упаковке.';
+    scanner = new ZXing.BrowserMultiFormatReader();
+    scanner.decodeFromVideoDevice(undefined, $('video'), async (result) => {
+      if (!result) return;
+      const code = result.getText();
+      stopScan();
+      try {
+        const item = await offByBarcode(code);
+        if (!item) {
+          alert('Продукт с кодом ' + code + ' не найден. Попробуйте поиск.');
+          return;
+        }
+        pick(item);
+      } catch (e) {
+        alert('Не удалось получить данные о продукте. Проверьте интернет.');
+      }
+    }).catch(() => {
+      alert('Нет доступа к камере. Разрешите камеру для Safari в настройках телефона.');
+      stopScan();
+    });
+  });
+
+  $('stopScan').addEventListener('click', stopScan);
+
+  // Поиск
+  $('btnSearch').addEventListener('click', () => {
+    stopScan();
+    $('searchBox').classList.toggle('hidden');
+  });
+
+  function usdaKey() {
+    let key = load('usdaKey', '');
+    if (!key) {
+      key = (prompt('Бесплатный ключ USDA (нужен один раз). Получить: api.nal.usda.gov. Если пропустить, будет искать только упаковочные продукты:') || '').trim();
+      if (key) save('usdaKey', key);
+    }
+    return key;
+  }
+
+  $('runSearch').addEventListener('click', async () => {
+    const q = $('query').value.trim();
+    if (!q) return;
+    const key = usdaKey();
+    $('results').innerHTML = '<div class="warn">Ищу…</div>';
+    const tasks = [offSearch(q)];
+    if (key) tasks.push(usdaSearch(q, key));
+    const settled = await Promise.allSettled(tasks);
+    const items = settled.filter((s) => s.status === 'fulfilled').flatMap((s) => s.value);
+    $('results').innerHTML = '';
+    if (!items.length) {
+      $('results').innerHTML = '<div class="warn">Ничего не нашлось. Попробуйте другое слово.</div>';
+      return;
+    }
+    items.forEach((item) => {
+      const b = document.createElement('button');
+      b.className = 'result';
+      b.textContent = item.name;
+      const s = document.createElement('small');
+      s.textContent = item.kcal100 + ' ккал на 100 г';
+      b.append(s);
+      b.addEventListener('click', () => pick(item));
+      $('results').append(b);
+    });
   });
 
   $('editProfile').addEventListener('click', () => showSetup(load('profile', null)));
