@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Калории">
+<title>Калории</title>
+<style>
+  :root { --green: #16a34a; --bg: #f3f4f6; --card: #ffffff; --text: #111827; --muted: #6b7280; --line: #e5e7eb; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111827; --card: #1f2937; --text: #f9fafb; --muted: #9ca3af; --line: #374151; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); padding: env(safe-area-inset-top) 16px 32px; }
+  h1 { font-size: 28px; margin: 24px 0 4px; }
+  h2 { font-size: 18px; margin: 0 0 12px; }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 16px; }
+  .card { background: var(--card); border-radius: 16px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  label { display: block; font-size: 14px; color: var(--muted); margin: 12px 0 4px; }
+  input, select { width: 100%; font-size: 17px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--text); }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip { flex: 1; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--text); font-size: 15px; text-align: center; }
+  .chip.on { border-color: var(--green); color: var(--green); font-weight: 600; }
+  button.main { width: 100%; padding: 14px; margin-top: 16px; font-size: 17px; font-weight: 600; background: var(--green); color: #fff; border: 0; border-radius: 14px; }
+  button.small { padding: 10px 14px; font-size: 15px; background: var(--line); color: var(--text); border: 0; border-radius: 12px; }
+  button.half { flex: 1; padding: 12px; font-size: 15px; font-weight: 600; background: var(--line); color: var(--text); border: 0; border-radius: 12px; }
+  .big { font-size: 40px; font-weight: 700; color: var(--green); }
+  .stat { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+  .stat:last-child { border-bottom: 0; }
+  .macros { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; margin-top: 8px; }
+  .macros b { display: block; font-size: 20px; }
+  .macros span { font-size: 13px; color: var(--muted); }
+  .entry { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .entry:last-child { border-bottom: 0; }
+  .warn { font-size: 13px; color: var(--muted); margin-top: 12px; line-height: 1.4; }
+  .hidden { display: none; }
+  .tools { display: flex; justify-content: space-between; margin-top: 12px; }
+  .result { display: block; width: 100%; text-align: left; padding: 12px; margin-top: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--text); font-size: 15px; }
+  .result small { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+  video { width: 100%; border-radius: 12px; background: #000; margin-top: 12px; }
+  .box { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+
+<!-- Экран 1: профиль -->
+<div id="setup" class="hidden">
+  <h1>Ваш профиль</h1>
+  <div class="sub">Заполните один раз. Всё хранится только в этом телефоне.</div>
+  <div class="card">
+    <label>Пол</label>
+    <div class="chips">
+      <div class="chip" data-sex="female">Женский</div>
+      <div class="chip" data-sex="male">Мужской</div>
+    </div>
+    <div class="row">
+      <div><label>Возраст</label><input id="age" type="number" inputmode="numeric" min="14" max="100"></div>
+      <div><label>Рост, см</label><input id="height" type="number" inputmode="numeric" min="120" max="230"></div>
+    </div>
+    <div class="row">
+      <div><label>Вес сейчас, кг</label><input id="weight" type="number" inputmode="decimal" min="30" max="300" step="0.1"></div>
+      <div><label>Хочу весить, кг</label><input id="target" type="number" inputmode="decimal" min="30" max="300" step="0.1"></div>
+    </div>
+    <label>Уровень активности</label>
+    <select id="activity">
+      <option value="sedentary">Сидячий образ жизни</option>
+      <option value="light">Лёгкие тренировки 1–3 раза в неделю</option>
+      <option value="moderate">Умеренные тренировки 3–5 раз в неделю</option>
+      <option value="heavy">Интенсивные тренировки 6–7 раз в неделю</option>
+      <option value="very_heavy">Очень высокая нагрузка или физическая работа</option>
+    </select>
+    <label>Желаемый темп, кг в неделю</label>
+    <select id="pace">
+      <option value="0.25">0,25</option>
+      <option value="0.5">0,5</option>
+      <option value="1" selected>1</option>
+      <option value="1.5">1,5</option>
+      <option value="2">2</option>
+    </select>
+    <div id="setupError" class="warn"></div>
+    <button class="main" id="saveProfile">Сохранить</button>
+  </div>
+  <div class="warn">Это расчёт, а не медицинская рекомендация. При болезнях, беременности и для подростков — к врачу.</div>
+</div>
+
+<!-- Экран 2: главный -->
+<div id="main" class="hidden">
+  <h1>Сегодня</h1>
+  <div class="sub" id="today"></div>
+
+  <div class="card">
+    <h2>Норма на день</h2>
+    <div class="big" id="intake"></div>
+    <div class="warn" id="floorNote"></div>
+    <div class="stat"><span>Фактический темп</span><b id="pace2"></b></div>
+    <div class="stat"><span>Срок до цели</span><b id="weeks"></b></div>
+    <div class="stat"><span>Расход в покое + активность</span><b id="expend"></b></div>
+    <div class="macros">
+      <div><b id="protein"></b><span>белки, г</span></div>
+      <div><b id="fat"></b><span>жиры, г</span></div>
+      <div><b id="carbs"></b><span>углеводы, г</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Съедено сегодня</h2>
+    <div class="stat"><span>Осталось</span><b id="left"></b></div>
+
+    <div class="row" style="margin-top:12px">
+      <button class="half" id="btnScan">Штрихкод</button>
+      <button class="half" id="btnSearch">Поиск продукта</button>
+    </div>
+
+    <!-- Сканер штрихкода -->
+    <div id="scanBox" class="box hidden">
+      <video id="video" playsinline muted></video>
+      <div class="warn" id="scanStatus">Наведите камеру на штрихкод на упаковке.</div>
+      <button class="small" id="stopScan" style="margin-top:8px">Закрыть сканер</button>
+    </div>
+
+    <!-- Поиск продукта -->
+    <div id="searchBox" class="box hidden">
+      <div class="row">
+        <input id="query" placeholder="Например: груша, творог, pear">
+        <button class="small" id="runSearch" style="flex:0.6">Найти</button>
+      </div>
+      <div class="warn">База USDA понимает английские названия (pear, chicken breast). Русские названия ищутся в базе упаковочных продуктов.</div>
+      <div id="results"></div>
+    </div>
+
+    <!-- Выбор порции -->
+    <div id="portion" class="box hidden">
+      <h2 id="pName"></h2>
+      <div class="warn" id="pInfo"></div>
+      <label>Сколько грамм</label>
+      <div class="row">
+        <input id="pGrams" type="number" inputmode="numeric" min="1" value="100">
+        <button class="small" id="addPortion" style="flex:0.8">В дневник</button>
+      </div>
+    </div>
+
+    <div id="entries" style="margin-top:12px"></div>
+  </div>
+
+  <div class="tools">
+    <button class="small" id="editProfile">Изменить профиль</button>
+    <button class="small" id="resetAll">Стереть данные</button>
+  </div>
+</div>
+
+<!-- Библиотека сканера штрихкодов (бесплатная, открытая) -->
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+<script>
+  // Расчёт. Те же правила, что в calorie.js и тестах.
+  const ACTIVITY = { sedentary: 1.2, light: 1.375, moderate: 1.55, heavy: 1.725, very_heavy: 1.9 };
+  const FLOOR = 1200;
+  const KCAL_PER_KG = 7700;
+
+  function plan(p) {
+    const bmr = 10 * p.weight + 6.25 * p.height - 5 * p.age + (p.sex === 'male' ? 5 : -161);
+    const expend = Math.round(bmr * ACTIVITY[p.activity]);
+    const wanted = expend - (p.pace * KCAL_PER_KG) / 7;
+    const intake = Math.max(FLOOR, Math.round(wanted / 50) * 50);
+    const actualPace = ((expend - intake) * 7) / KCAL_PER_KG;
+    const protein = Math.round(1.8 * p.target);
+    const fat = Math.round(0.8 * p.target);
+    const carbs = Math.round((intake - protein * 4 - fat * 9) / 4);
+    const weeks = Math.ceil((p.weight - p.target) / actualPace);
+    return { expend, intake, actualPace: Math.round(actualPace * 100) / 100, floorApplied: intake === FLOOR && wanted < FLOOR, protein, fat, carbs, weeks };
+  }
+
+  // Продукты. Калории на 100 г и порция в граммах.
+  function portionKcal(kcal100, grams) {
+    return Math.round((kcal100 * grams) / 100);
+  }
+
+  // Открытая база Open Food Facts: данные из магазинных упаковок.
+  function offItem(p) {
+    const n = p.nutriments || {};
+    let kcal = n['energy-kcal_100g'];
+    if (kcal == null && n['energy_100g'] != null) kcal = n['energy_100g'] / 4.184;
+    if (kcal == null) return null;
+    const name = [p.product_name, p.brands].filter(Boolean).join(', ') || 'Продукт';
+    return { name, kcal100: Math.round(kcal) };
+  }
+
+  // База USDA: данные по простым продуктам (английские названия).
+  function usdaItem(f) {
+    const get = (re, unit) => {
+      const n = (f.foodNutrients || []).find((x) => re.test(x.nutrientName) && (!unit || x.unitName === unit));
+      return n ? n.value : null;
+    };
+    const kcal = get(/^Energy$/, 'KCAL');
+    if (kcal == null) return null;
+    return { name: f.description, kcal100: Math.round(kcal) };
+  }
+
+  async function offByBarcode(code) {
+    const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=product_name,brands,nutriments`);
+    const j = await r.json();
+    return j.status === 1 ? offItem(j.product) : null;
+  }
+
+  async function offSearch(q) {
+    const r = await fetch(`https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=10`);
+    const j = await r.json();
+    return (j.products || []).map(offItem).filter(Boolean);
+  }
+
+  async function usdaSearch(q, key) {
+    const r = await fetch(`https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${encodeURIComponent(key)}&query=${encodeURIComponent(q)}&pageSize=10`);
+    if (!r.ok) throw new Error('USDA ' + r.status);
+    const j = await r.json();
+    return (j.foods || []).map(usdaItem).filter(Boolean);
+  }
+
+  // Хранилище: если браузер не даёт писать, приложение всё равно работает.
+  function load(key, fallback) {
+    try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch (e) { return fallback; }
+  }
+  function save(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
+  }
+
+  const $ = (id) => document.getElementById(id);
+  const todayKey = () => new Date().toISOString().slice(0, 10);
+  let sex = null;
+
+  document.querySelectorAll('[data-sex]').forEach((el) => {
+    el.addEventListener('click', () => {
+      sex = el.dataset.sex;
+      document.querySelectorAll('[data-sex]').forEach((x) => x.classList.toggle('on', x === el));
+    });
+  });
+
+  function showSetup(profile) {
+    $('setup').classList.remove('hidden');
+    $('main').classList.add('hidden');
+    if (profile) {
+      sex = profile.sex;
+      document.querySelectorAll('[data-sex]').forEach((x) => x.classList.toggle('on', x.dataset.sex === sex));
+      $('age').value = profile.age;
+      $('height').value = profile.height;
+      $('weight').value = profile.weight;
+      $('target').value = profile.target;
+      $('activity').value = profile.activity;
+      $('pace').value = String(profile.pace);
+    }
+  }
+
+  $('saveProfile').addEventListener('click', () => {
+    const p = {
+      sex,
+      age: Number($('age').value),
+      height: Number($('height').value),
+      weight: Number($('weight').value),
+      target: Number($('target').value),
+      activity: $('activity').value,
+      pace: Number($('pace').value),
+    };
+    if (!p.sex || !p.age || !p.height || !p.weight || !p.target) {
+      $('setupError').textContent = 'Заполните все поля.';
+      return;
+    }
+    if (p.target >= p.weight) {
+      $('setupError').textContent = 'Желаемый вес должен быть меньше текущего.';
+      return;
+    }
+    $('setupError').textContent = '';
+    save('profile', p);
+    showMain();
+  });
+
+  function showMain() {
+    const p = load('profile', null);
+    if (!p) return showSetup(null);
+    $('setup').classList.add('hidden');
+    $('main').classList.remove('hidden');
+    const r = plan(p);
+    $('today').textContent = new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
+    $('intake').textContent = r.intake + ' ккал';
+    $('floorNote').textContent = r.floorApplied ? 'Минимум 1200 ккал: ниже не опускаемся, поэтому темп ограничен.' : '';
+    $('pace2').textContent = r.actualPace.toString().replace('.', ',') + ' кг/нед';
+    $('weeks').textContent = '~' + r.weeks + ' нед.';
+    $('expend').textContent = r.expend + ' ккал';
+    $('protein').textContent = r.protein;
+    $('fat').textContent = r.fat;
+    $('carbs').textContent = r.carbs;
+    renderLog();
+  }
+
+  function renderLog() {
+    const p = load('profile', null);
+    const log = load('log', {});
+    const items = log[todayKey()] || [];
+    const eaten = items.reduce((sum, x) => sum + x.kcal, 0);
+    const left = plan(p).intake - eaten;
+    $('left').textContent = left + ' ккал';
+    $('entries').innerHTML = '';
+    items.forEach((x, i) => {
+      const row = document.createElement('div');
+      row.className = 'entry';
+      const name = document.createElement('span');
+      name.textContent = x.name + ' · ' + x.kcal + ' ккал';
+      const del = document.createElement('button');
+      del.className = 'small';
+      del.textContent = 'Убрать';
+      del.addEventListener('click', () => {
+        const l = load('log', {});
+        l[todayKey()].splice(i, 1);
+        save('log', l);
+        renderLog();
+      });
+      row.append(name, del);
+      $('entries').append(row);
+    });
+  }
+
+  function addEntry(name, kcal) {
+    const log = load('log', {});
+    log[todayKey()] = log[todayKey()] || [];
+    log[todayKey()].push({ name, kcal: Math.round(kcal) });
+    save('log', log);
+    renderLog();
+  }
+
+  // Выбор продукта и порции
+  let picked = null;
+
+  function pick(item) {
+    picked = item;
+    $('portion').classList.remove('hidden');
+    $('pName').textContent = item.name;
+    $('pInfo').textContent = item.kcal100 + ' ккал на 100 г';
+    $('pGrams').value = 100;
+  }
+
+  $('addPortion').addEventListener('click', () => {
+    const g = Number($('pGrams').value);
+    if (!picked || !(g > 0)) return;
+    addEntry(picked.name + ', ' + g + ' г', portionKcal(picked.kcal100, g));
+    picked = null;
+    $('portion').classList.add('hidden');
+  });
+
+  // Штрихкод
+  let scanner = null;
+
+  function stopScan() {
+    if (scanner) {
+      try { scanner.reset(); } catch (e) {}
+      scanner = null;
+    }
+    $('scanBox').classList.add('hidden');
+  }
+
+  $('btnScan').addEventListener('click', () => {
+    $('searchBox').classList.add('hidden');
+    if (typeof ZXing === 'undefined') {
+      alert('Не загрузился сканер. Проверьте интернет и попробуйте снова.');
+      return;
+    }
+    $('scanBox').classList.remove('hidden');
+    $('scanStatus').textContent = 'Наведите камеру на штрихкод на упаковке.';
+    scanner = new ZXing.BrowserMultiFormatReader();
+    scanner.decodeFromVideoDevice(undefined, $('video'), async (result) => {
+      if (!result) return;
+      const code = result.getText();
+      stopScan();
+      try {
+        const item = await offByBarcode(code);
+        if (!item) {
+          alert('Продукт с кодом ' + code + ' не найден. Попробуйте поиск.');
+          return;
+        }
+        pick(item);
+      } catch (e) {
+        alert('Не удалось получить данные о продукте. Проверьте интернет.');
+      }
+    }).catch(() => {
+      alert('Нет доступа к камере. Разрешите камеру для Safari в настройках телефона.');
+      stopScan();
+    });
+  });
+
+  $('stopScan').addEventListener('click', stopScan);
+
+  // Поиск
+  $('btnSearch').addEventListener('click', () => {
+    stopScan();
+    $('searchBox').classList.toggle('hidden');
+  });
+
+  function usdaKey() {
+    let key = load('usdaKey', '');
+    if (!key) {
+      key = (prompt('Бесплатный ключ USDA (нужен один раз). Получить: api.nal.usda.gov. Если пропустить, будет искать только упаковочные продукты:') || '').trim();
+      if (key) save('usdaKey', key);
+    }
+    return key;
+  }
+
+  $('runSearch').addEventListener('click', async () => {
+    const q = $('query').value.trim();
+    if (!q) return;
+    const key = usdaKey();
+    $('results').innerHTML = '<div class="warn">Ищу…</div>';
+    const tasks = [offSearch(q)];
+    if (key) tasks.push(usdaSearch(q, key));
+    const settled = await Promise.allSettled(tasks);
+    const items = settled.filter((s) => s.status === 'fulfilled').flatMap((s) => s.value);
+    $('results').innerHTML = '';
+    if (!items.length) {
+      $('results').innerHTML = '<div class="warn">Ничего не нашлось. Попробуйте другое слово.</div>';
+      return;
+    }
+    items.forEach((item) => {
+      const b = document.createElement('button');
+      b.className = 'result';
+      b.textContent = item.name;
+      const s = document.createElement('small');
+      s.textContent = item.kcal100 + ' ккал на 100 г';
+      b.append(s);
+      b.addEventListener('click', () => pick(item));
+      $('results').append(b);
+    });
+  });
+
+  $('editProfile').addEventListener('click', () => showSetup(load('profile', null)));
+  $('resetAll').addEventListener('click', () => {
+    if (!confirm('Стереть профиль и весь дневник?')) return;
+    try { localStorage.clear(); } catch (e) {}
+    location.reload();
+  });
+
+  showMain();
+</script>
+</body>
+</html>
